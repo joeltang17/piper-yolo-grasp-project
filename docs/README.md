@@ -2,6 +2,15 @@
 
 [简体中文](README.zh-CN.md)
 
+Project-specific starting points:
+
+- [Current overview](../README.md)
+- [Provenance and credits](../CREDITS.md)
+- [Reproduction and migration](reproduction.md)
+- [Evidence and limitations](evaluation.md)
+
+The guides below include inherited workflows. See the reproduction guide for this adaptation's runtime and local calibration requirements.
+
 Recommended reading order for first-time users:
 
 1. [First-Time Onboarding](onboarding.md)

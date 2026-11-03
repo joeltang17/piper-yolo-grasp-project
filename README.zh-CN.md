@@ -1,164 +1,46 @@
-# piper-vision-grasp-new
+# Piper YOLO + GraspNet 机器人抓取
 
-[English](README.md)
+[English](README.md) · [项目来源与致谢](CREDITS.md) · [实验记录](docs/evaluation.md)
 
-这是一个面向 **Piper 眼在手上视觉抓取** 的应用层工作区，基于以下三部分构建：
+由 **Joel Tang** 维护的机器人系统集成项目：利用 YOLOE 选择目标，将 RGB-D 数据转换为点云，通过预训练 GraspNet 生成抓取候选，再使用 AgileX Piper 机械臂完成受监督的桌面搬运实验。
 
-- `third_party/pyAgxArm` 中 vendored 的 `pyAgxArm` SDK
-- `third_party/yolo/新松-检测` 中 vendored 的 YOLO 代码
-- `src/piper_app` 中我们自己的标定、监控、遥操作和点击抓取工具
+本项目基于 [xsb2lyang/piper-vision-grasp-new](https://github.com/xsb2lyang/piper-vision-grasp-new)。原项目提供标定、监控、遥操作、关键位记录和点击抓取流程；本分支扩展感知、GraspNet 接入、规划与执行。这里不声称自行训练或提出 YOLOE、GraspNet 模型。
 
-## 项目亮点
+## 本分支的主要工作
 
-- 基于 `pyrealsense2` 的 D405 / D435 风格 RealSense 相机支持
-- 基于 ChArUco 的内参标定与 eye-in-hand 手眼标定
-- 机械臂 + 相机只读监控界面，支持 YOLO11 检测框叠加
-- 面向夹爪抓取中心的 TCP offset 估计流程
-- `home / observe / drop_pose` 关键位采集工具
-- 集成深度、手眼和夹爪控制的点击抓取 demo
+- YOLOE / YOLO-World 接入、类别选择与目标掩码处理。
+- 固定帧 RGB-D、相机内参、前景点云提取和深度不足拒绝。
+- 独立 GraspNet 推理进程、抓取预览、候选过滤与离线回放。
+- 相机与机器人 TCP 映射、受限逆运动学、采样路径检查和受监督执行。
+- D435i 本地适配、相机/手眼/TCP 标定、示教位姿及回归检查。
 
-## 目录结构
+继承功能与新增工作的边界见 [CREDITS.md](CREDITS.md)。
 
-```text
-.
-├── apps/                  # 本地薄启动脚本
-├── assets/                # 标定板和静态资源
-├── configs/               # 机器人、相机、标定、任务配置
-├── docs/                  # 使用文档
-├── scripts/               # 推荐入口脚本
-├── src/piper_app/         # 应用层 Python 包
-├── tests/                 # 轻量导入与配置检查
-└── third_party/           # vendored 上游依赖
-```
+## 当前状态
 
-## 快速开始
+这是受监督的台架原型。开发文档记录了两次用户报告的木块搬运成功，但没有受控的成功率统计；最新规划改动的现有记录仅包括离线验证。抓取分数不是实际成功概率，简化碰撞模型不能保证完整机械臂路径无碰撞。
 
-推荐环境：
+![同一张保存图像中手动提供两个框后得到的 YOLOE 掩码](docs/media/block-visual-prompt.png)
 
-- Ubuntu
-- `uv`
-- Python `3.10`
-- 仓库本地 `.venv`
+上图是独立的离线视觉提示实验，不代表跨视角自动识别或机器人抓取成功，也不代表当前类别 GUI 实现了手动框提示。原始结果见 [实验记录](docs/evaluation.md)。目前尚未加入实物抓取视频。
 
-初始化或重建环境：
+## 开始使用
+
+目标环境为 Ubuntu 22.04、Python 3.10 和 uv。安装 Git 与 uv 后：
 
 ```bash
+git clone https://github.com/joeltang17/piper-yolo-grasp-project.git
+cd piper-yolo-grasp-project
 ./scripts/setup_env.sh
-./scripts/setup_env.sh --recreate
-```
-
-跑一次项目自检：
-
-```bash
 ./scripts/run_doctor.sh
 ```
 
-第一次把机械臂接到电脑上时，建议先执行这两条 CAN 命令：
+应用安装脚本不会重建独立的 GraspNet CUDA 环境或下载所有模型。当前 GraspNet 配置引用旧项目的相对路径；迁移需要重新配置。见 [复现与迁移](docs/reproduction.md)。
 
-```bash
-sudo ip link set can0 type can bitrate 1000000
-sudo ip link set can0 up
-```
+- [英文介绍与流程图](README.md)
+- [GraspNet 预览](docs/graspnet_target_pick_demo.md)：拒绝运动命令。
+- [受监督抓取](docs/graspnet_pick_demo.md)：可以控制机械臂，默认勾选 dry-run。
+- [候选与路径拒绝原因](docs/graspnet_plan_rejections.md)
+- [原有中文文档](docs/README.zh-CN.md)
 
-如果你更希望用项目脚本，也可以这样做：
-
-```bash
-sudo ./scripts/bringup_can.sh can0 1000000
-```
-
-启动监控界面：
-
-```bash
-./scripts/run_monitor.sh
-./scripts/run_monitor.sh --yolo
-```
-
-启动点击抓取 demo：
-
-```bash
-./scripts/run_click_pick_demo.sh --yolo --dry-run
-./scripts/run_click_pick_demo.sh --yolo --no-dry-run
-```
-
-## 核心工作流
-
-### 1. 标定
-
-```bash
-./scripts/run_calibrate_intrinsics.sh
-./scripts/run_calibrate_handeye.sh
-./scripts/run_validate_handeye.sh
-./scripts/run_estimate_tcp_offset.sh
-```
-
-### 2. 关键位采集
-
-```bash
-./scripts/run_capture_keypoints.sh
-```
-
-建议至少采集并保存：
-
-- `home`
-- `observe`
-- `drop_pose`
-
-### 3. 遥操作
-
-```bash
-./scripts/run_gui.sh
-./scripts/run_keyboard.sh
-```
-
-### 4. 监控与感知
-
-```bash
-./scripts/run_monitor.sh
-./scripts/run_monitor.sh --yolo
-```
-
-### 5. 视觉抓取 Demo
-
-```bash
-./scripts/run_click_pick_demo.sh --yolo --dry-run
-./scripts/run_click_pick_demo.sh --yolo --no-dry-run
-```
-
-## 文档
-
-- [文档导航](docs/README.zh-CN.md)
-- [Documentation Index](docs/README.md)
-- [第一次上手指南](docs/onboarding.zh-CN.md)
-- [First-Time Onboarding](docs/onboarding.md)
-- [快速上手流程](docs/quickstart.zh-CN.md)
-- [Quick Start Workflow](docs/quickstart.md)
-- [新设备复现检查清单](docs/reproduce_checklist.zh-CN.md)
-- [Reproducibility Checklist](docs/reproduce_checklist.md)
-- [安装说明](docs/installation.md)
-- [遥操作](docs/teleop.md)
-- [手眼标定](docs/handeye.md)
-- [关键位采集](docs/keypoints.md)
-- [TCP Offset 估计](docs/tcp_offset.md)
-- [点击抓取 Demo](docs/pick_demo.md)
-- [YOLO 目标抓取 Demo](docs/yolo_target_pick_demo.zh-CN.md)
-
-## 可直接打印复用的标定板
-
-仓库里已经直接包含默认 ChArUco 标定板资产，别人 clone 后可以直接打印：
-
-- [assets/calibration/charuco_default/charuco_board.pdf](assets/calibration/charuco_default/charuco_board.pdf)
-- [assets/calibration/charuco_default/charuco_board.png](assets/calibration/charuco_default/charuco_board.png)
-- [assets/calibration/charuco_default/charuco_board.yaml](assets/calibration/charuco_default/charuco_board.yaml)
-- [assets/calibration/charuco_default/README.md](assets/calibration/charuco_default/README.md)
-
-## 项目说明
-
-- 当前顶层项目名已经统一为 **`piper-vision-grasp-new`**
-- `pyAgxArm` 仍然作为上游 SDK 保留在 `third_party/pyAgxArm`
-- 内部 Python 包名暂时仍然是 `piper_app`，但仓库名和分发元数据已经切到新的项目名
-
-## 致谢
-
-- AgileX Robotics 的 `pyAgxArm`
-- `Ultralytics YOLO11`
-- `third_party/yolo/新松-检测` 中 vendored 的本地 YOLO 工作区
+原有许可、版权声明和提交历史保留。依赖和模型受其自身条款约束；GraspNet baseline 包含独立的非商业研究使用协议，见 [第三方声明](THIRD_PARTY_NOTICES.md)。

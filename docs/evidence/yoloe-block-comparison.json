@@ -1,0 +1,180 @@
+{
+  "scope": "Offline inference on the previously saved wrist-camera frame. No application edits, camera access, robot connection, or training.",
+  "visual_prompt_boxes": {
+    "object0_gray_block": [
+      52,
+      151,
+      151,
+      316
+    ],
+    "object1_wooden_block": [
+      143,
+      0,
+      252,
+      215
+    ]
+  },
+  "tests": [
+    {
+      "mode": "visual",
+      "seconds": 0.71,
+      "masks_present": true,
+      "detections": [
+        {
+          "label": "object0",
+          "confidence": 0.81774,
+          "bbox_xyxy": [
+            50.63,
+            155.35,
+            145.69,
+            314.46
+          ],
+          "mask_area_pixels": 7104
+        },
+        {
+          "label": "object1",
+          "confidence": 0.58032,
+          "bbox_xyxy": [
+            138.21,
+            0.0,
+            250.85,
+            211.57
+          ],
+          "mask_area_pixels": 12182
+        },
+        {
+          "label": "object0",
+          "confidence": 0.14714,
+          "bbox_xyxy": [
+            590.42,
+            353.74,
+            640.0,
+            480.0
+          ],
+          "mask_area_pixels": 5372
+        },
+        {
+          "label": "object0",
+          "confidence": 0.11726,
+          "bbox_xyxy": [
+            0.0,
+            364.51,
+            111.7,
+            479.96
+          ],
+          "mask_area_pixels": 10595
+        }
+      ]
+    },
+    {
+      "mode": "text",
+      "seconds": 2.58,
+      "masks_present": true,
+      "detections": [
+        {
+          "label": "bottle",
+          "confidence": 0.87852,
+          "bbox_xyxy": [
+            220.7,
+            0.1,
+            372.8,
+            282.88
+          ],
+          "mask_area_pixels": 34610
+        },
+        {
+          "label": "gray block",
+          "confidence": 0.03532,
+          "bbox_xyxy": [
+            526.19,
+            0.09,
+            640.0,
+            366.55
+          ],
+          "mask_area_pixels": 33651
+        },
+        {
+          "label": "wooden block",
+          "confidence": 0.02689,
+          "bbox_xyxy": [
+            50.91,
+            155.06,
+            145.25,
+            313.99
+          ],
+          "mask_area_pixels": 7140
+        },
+        {
+          "label": "bottle",
+          "confidence": 0.02417,
+          "bbox_xyxy": [
+            139.26,
+            0.53,
+            249.55,
+            214.92
+          ],
+          "mask_area_pixels": 12307
+        },
+        {
+          "label": "gray block",
+          "confidence": 0.01521,
+          "bbox_xyxy": [
+            0.25,
+            0.0,
+            116.41,
+            83.71
+          ],
+          "mask_area_pixels": 7966
+        },
+        {
+          "label": "gray block",
+          "confidence": 0.01336,
+          "bbox_xyxy": [
+            590.55,
+            353.64,
+            640.0,
+            479.84
+          ],
+          "mask_area_pixels": 5367
+        },
+        {
+          "label": "gray block",
+          "confidence": 0.01216,
+          "bbox_xyxy": [
+            0.0,
+            325.48,
+            112.08,
+            480.0
+          ],
+          "mask_area_pixels": 12867
+        }
+      ]
+    }
+  ],
+  "visual_at_application_threshold": {
+    "confidence_threshold": 0.25,
+    "detections": [
+      {
+        "label": "object0",
+        "confidence": 0.81774,
+        "bbox_xyxy": [
+          50.63,
+          155.35,
+          145.69,
+          314.46
+        ]
+      },
+      {
+        "label": "object1",
+        "confidence": 0.58032,
+        "bbox_xyxy": [
+          138.21,
+          0.0,
+          250.85,
+          211.57
+        ]
+      }
+    ],
+    "masks_present": true
+  }
+}
