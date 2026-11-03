@@ -3,4 +3,5 @@ interface: auto
 channel: auto
 bitrate: 1000000
 firmware_timeout: 5.0
-tcp_offset: [-0.0133, -0.0038, 0.1972, 0.0, 0.0, 0.0]
+# Provisional local gripping-centre TCP from six aligned captures.
+tcp_offset: [0.01002688067284757, -0.010866636913774009, 0.10323078233419246, 0.0, 0.0, 0.0]

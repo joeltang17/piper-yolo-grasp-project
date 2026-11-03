@@ -15,6 +15,13 @@ Board specification:
 
 ## Printing Notes
 
+Local correction (2026-10-27): `charuco_board.pdf` is now US Letter, with the
+unchanged pattern explicitly placed at 180 x 240 mm. `charuco_board_a4.pdf` uses
+A4 paper at the same physical scale. The upstream PDF at commit
+`831bb7bf99d002b5c29ed9e720bee7521842386c` instead had a 635 x 846.67 mm page,
+which did not yield the configured 30 mm squares at 100%. Use these corrected
+files and confirm the printed reference with a ruler.
+
 - Print `charuco_board.pdf` at **100% scale**
 - Disable any printer-side scaling such as:
   - `Fit to page`

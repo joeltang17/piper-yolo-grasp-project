@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+from dataclasses import asdict
 import time
 import threading
 import tkinter as tk
@@ -84,6 +86,7 @@ class ClickPickDemoGuiApp(CalibrationViewerBase):
         self.refresh_ui()
 
     def _request_ui_refresh(self) -> None:
+        print(f"[click-pick] {self._last_event_text}", flush=True)
         self.root.after(0, self.refresh_ui)
 
     def run_background_action(self, callback) -> None:
@@ -391,6 +394,10 @@ class ClickPickDemoGuiApp(CalibrationViewerBase):
         else:
             self.selected_warning_text = "Pixel selected. Ready to run Execute Pick."
         self._last_event_text = f"Selected pixel {src_point}."
+        print("[click-pick plan] " + json.dumps({
+            "selected_surface_base_point_m": base_point.tolist(),
+            "plan": asdict(self.selected_plan),
+        }), flush=True)
         self._draw_hover_overlay()
         self.refresh_ui()
 
@@ -549,6 +556,22 @@ class ClickPickDemoGuiApp(CalibrationViewerBase):
         self._request_ui_refresh()
         self._move_to_joint_pose("drop_pose", workspace.drop_pose.joint_angles)
 
+    def _move_to_drop_place_pose_above(self, workspace: PickDemoWorkspace) -> None:
+        self._poll_data()
+        if self._measured_tcp_pose is None:
+            raise RuntimeError("Current TCP pose unavailable.")
+
+        above_pose = list(self._measured_tcp_pose)
+        above_pose[2] += 0.05  # Move up 5 cm.
+
+        warning = validate_workspace_point(tuple(above_pose[:3]), workspace)
+        if warning:
+            raise RuntimeError(warning)
+
+        self._last_event_text = "Move up after dropping object."
+        self._request_ui_refresh()
+        self._move_to_tcp_pose("drop_above", above_pose, linear=True)
+
     def move_home(self) -> None:
         workspace = self._require_workspace()
         if self.dry_run_var.get():
@@ -641,6 +664,7 @@ class ClickPickDemoGuiApp(CalibrationViewerBase):
         self._last_event_text = "Step 10/10: release object."
         self._request_ui_refresh()
         self._set_gripper_width(open_width, force_n)
+        self._move_to_drop_place_pose_above(workspace)
         if self.dry_run_var.get():
             self._last_event_text = "Release completed in dry-run. Would return to observe."
             self._request_ui_refresh()

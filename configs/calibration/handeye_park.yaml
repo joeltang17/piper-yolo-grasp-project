@@ -1,0 +1,63 @@
+kind: handeye_tcp_camera
+generated_at: '2026-10-27T04:26:14-04:00'
+camera_serial: '261222075861'
+reference_frame: tcp
+method: Park
+sample_count: 38
+board:
+  squares_x: 6
+  squares_y: 8
+  square_length_m: 0.0336
+  marker_length_m: 0.02464
+  dictionary: DICT_4X4_50
+  config_path: /home/joeltang/piper-vision-grasp-new/configs/calibration/local_board/charuco_board.yaml
+consistency:
+  translation_std_m: 0.00804625474520911
+  rotation_mean_deg: 1.4760522389670303
+T_tcp_camera:
+  matrix:
+  - - 0.043725878909684164
+    - 0.940303720655257
+    - 0.3375158669388106
+    - -0.07719941590570407
+  - - -0.9990302054642785
+    - 0.03940719209888069
+    - 0.019639800937998164
+    - 0.016197263110824263
+  - - 0.005166825290050362
+    - -0.3380473134529593
+    - 0.9411149333549331
+    - -0.06343439631274682
+  - - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+  pose6:
+  - -0.07719941590570407
+  - 0.016197263110824263
+  - -0.06343439631274682
+  - -0.3448460830861337
+  - -0.005166848279326501
+  - -1.5270559180242083
+tcp_offset:
+- 0.01002688067284757
+- -0.010866636913774009
+- 0.10323078233419246
+- 0.0
+- 0.0
+- 0.0
+tcp_offset_status: provisional; six manually aligned samples, 5.014 mm std norm
+frame_conversion:
+  operation: T_grip_camera = inverse(T_flange_grip) @ T_flange_camera
+  source_tcp_offset:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  source_handeye_path: configs/calibration/sessions/20261027_041924_tcp_adoption/handeye_park.yaml
+  source_generated_at: '2026-10-27 03:22:51'
+  tcp_estimate_path: configs/calibration/tcp_offset_estimate.yaml
+  new_hardware_captures: false
+  accuracy_improvement_claimed: false

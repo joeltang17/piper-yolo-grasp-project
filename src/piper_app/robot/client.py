@@ -60,9 +60,11 @@ class PiperRobotClient:
         if init_gripper:
             gripper = robot.init_effector(robot.OPTIONS.EFFECTOR.AGX_GRIPPER)
         robot.connect()
+        # This SDK offset is a local frame transform, not a robot command.
+        # Calibration/keypoint readers need the same TCP as motion clients.
+        robot.set_tcp_offset(self.config.tcp_offset)
         if configure_robot:
             robot.set_speed_percent(int(self.config.speed_percent))
-            robot.set_tcp_offset(self.config.tcp_offset)
         time.sleep(0.2)
 
         self._robot = robot
@@ -186,9 +188,9 @@ class PiperRobotClient:
         target_xyz = np.asarray(target_pose[:3], dtype=np.float64)
         translation_error = float(np.linalg.norm(current_xyz - target_xyz))
 
-        current_rpy = np.asarray(current_pose[3:6], dtype=np.float64)
-        target_rpy = np.asarray(target_pose[3:6], dtype=np.float64)
-        rotation_error = float(np.degrees(np.linalg.norm(current_rpy - target_rpy)))
+        from piper_app.calibration.transforms import pose6_to_matrix, rotation_distance_deg
+        rotation_error = rotation_distance_deg(pose6_to_matrix(current_pose)[:3, :3],
+                                               pose6_to_matrix(target_pose)[:3, :3])
         return translation_error, rotation_error
 
     def wait_tcp_pose_reached(

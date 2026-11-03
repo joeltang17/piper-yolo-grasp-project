@@ -161,8 +161,9 @@ def build_pick_plan(
     grasp_xyz = pregrasp_xyz + np.array([0.0, 0.0, -descend_distance], dtype=np.float64)
     lift_xyz = grasp_xyz + np.array([0.0, 0.0, lift_distance], dtype=np.float64)
 
+    # A captured release pose already describes the physical TCP location.
+    # Object-specific pickup corrections must not shift that release pose.
     drop_pose = list(workspace.drop_pose.tcp_pose)
-    drop_pose[:3] = (np.asarray(drop_pose[:3], dtype=np.float64) + click_point_offset).tolist()
     drop_prepose = list(drop_pose)
     drop_prepose[:3] = (np.asarray(drop_pose[:3], dtype=np.float64) + drop_offset).tolist()
 

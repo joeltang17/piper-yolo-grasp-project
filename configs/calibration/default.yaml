@@ -1,4 +1,4 @@
-board_config_path: assets/calibration/charuco_default/charuco_board.yaml
+board_config_path: configs/calibration/local_board/charuco_board.yaml
 results_dir: configs/calibration
 session_base_dir: configs/calibration/sessions
 intrinsics_min_corners: 12

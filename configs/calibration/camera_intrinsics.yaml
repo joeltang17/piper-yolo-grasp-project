@@ -1,0 +1,31 @@
+kind: camera_intrinsics
+generated_at: '2026-10-27 02:17:24'
+camera_serial: '261222075861'
+resolution:
+  width: 640
+  height: 480
+board:
+  squares_x: 6
+  squares_y: 8
+  square_length_m: 0.0336
+  marker_length_m: 0.02464
+  dictionary: DICT_4X4_50
+  config_path: /home/joeltang/piper-vision-grasp-new/configs/calibration/local_board/charuco_board.yaml
+K:
+- - 610.4485075519807
+  - 0.0
+  - 322.62094413997835
+- - 0.0
+  - 614.8570433235521
+  - 239.5759784434619
+- - 0.0
+  - 0.0
+  - 1.0
+dist_coeffs:
+- 0.06471177638347743
+- 0.4174163085163331
+- -0.008355199082543133
+- -0.0024944415295055063
+- -1.7716984948399939
+rms_reprojection_error: 0.2073474572624149
+sample_count: 31

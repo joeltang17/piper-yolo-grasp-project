@@ -331,13 +331,17 @@ class KeypointCaptureGuiApp:
         self._refresh_points_list()
 
     def save_points(self) -> None:
+        # Re-teaching one pose must preserve local task settings already saved
+        # with these keypoints (opening, offsets, workspace and placement).
+        existing = load_keypoint_config(self.output_path_var.get())
+        task_defaults = {**self.args.task_defaults, **existing.get("task_defaults", {})}
         payload = build_keypoint_payload(
             robot=self.robot_var.get(),
             interface=self.interface_var.get(),
             channel=self.channel_var.get(),
             bitrate=int(self.bitrate_var.get()),
             tcp_offset=list(self.args.tcp_offset),
-            task_defaults=self.args.task_defaults,
+            task_defaults=task_defaults,
             records=sorted(self._records, key=lambda item: item.name),
         )
         path = save_keypoint_config(self.output_path_var.get(), payload)

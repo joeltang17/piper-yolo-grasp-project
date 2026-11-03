@@ -1,0 +1,8 @@
+# User approximate whole-pattern measurement: 201 x 269 mm, 2026-10-27.
+# Nominal square size 33.6 mm predicts 201.6 x 268.8 mm.
+# Marker size retains the original 22/30 ratio under uniform print scaling.
+squares_x: 6
+squares_y: 8
+square_length_m: 0.0336
+marker_length_m: 0.02464
+dictionary: DICT_4X4_50

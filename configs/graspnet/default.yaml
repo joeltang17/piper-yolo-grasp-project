@@ -1,0 +1,56 @@
+runtime_python: ../Robot_arm/.venv/bin/python
+source_root: ../Robot_arm/graspnet
+checkpoint: ../Robot_arm/graspnet/checkpoint-rs.tar
+checkpoint_sha256: 60680087c61cba2b6791614fef1519071e294f6dcaf99b3f581bb95f7c51a868
+replay_dir: .cache/graspnet/requests
+num_points: 20000
+seed: 2701
+depth_min_m: 0.08
+depth_max_m: 0.90
+mask_erode_pixels: 1
+min_object_points: 200
+min_valid_fraction: 0.15
+# Break image adjacency at metric depth discontinuities; retain scene obstacles.
+foreground_neighbor_m: 0.008
+foreground_min_fraction: 0.55
+network_context_m: 0.06
+# User measured fully open inner-pad gap: 100 mm.
+max_opening_m: 0.100
+# User measured longitudinal contact-pad length: 70 mm.
+pad_length_m: 0.070
+opening_margin_m: 0.004
+ownership_radius_m: 0.015
+voxel_size_m: 0.005
+approach_distance_m: 0.05
+collision_threshold: 0.01
+max_collision_candidates: 200
+max_results: 40
+timeout_s: 90
+
+# Initial task: isolated rigid opaque objects, visible pickup table.
+# No full-arm collision model or arbitrary 6D motion is claimed.
+execution:
+  # Saved full TCP pose is an air-release above the bin, not a tabletop anchor.
+  placement_mode: taught_release
+  approach_m: 0.09
+  lift_m: 0.10
+  minimum_lift_m: 0.03
+  release_clearance_m: 0.05
+  release_gap_m: 0.003
+  geometry_margin_m: 0.004
+  # Small measured start overruns only; commanded joint limits remain unchanged.
+  # Recovery is planned offline and runs only after a live execution action.
+  start_recovery_max_overrun_deg: 1.0
+  start_recovery_inset_deg: 1.0
+  speed_percent: 10
+  pose_translation_tol_m: 0.005
+  pose_rotation_tol_deg: 3.0
+  timeout_s: 20
+  snapshot_max_age_s: 180
+  # After a completed open approach, allow a separate measured-pose inspection pause.
+  pregrasp_confirmation_max_age_s: 60
+  # Prioritized first batch; remaining neural proposals are tried automatically only if needed.
+  initial_candidates: 20
+  # Physical pad gap at full opening is known (100 mm). For this first mode use
+  # the SDK maximum command; do not assume motor travel equals physical gap.
+  frame_verification_path: .cache/graspnet/frame-verification.json

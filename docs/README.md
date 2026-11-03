@@ -18,6 +18,8 @@ Core guides:
 - [Keypoint Capture](keypoints.md)
 - [Click Pick Demo](pick_demo.md)
 - [YOLO Target Pick Demo](yolo_target_pick_demo.md)
+- [GraspNet Target Preview](graspnet_target_pick_demo.md)
+- [Restricted GraspNet Pick Trial](graspnet_pick_demo.md)
 
 Tracked reusable task template:
 

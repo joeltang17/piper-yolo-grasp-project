@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import time
 from typing import Any, Optional
 
 import numpy as np
@@ -35,6 +36,15 @@ class D405FrameBundle:
     width: int
     height: int
     serial: str
+    intrinsics: Optional[dict[str, Any]] = None
+    frame_number: Optional[int] = None
+    timestamp_ms: Optional[float] = None
+    timestamp_domain: Optional[str] = None
+    received_monotonic_s: Optional[float] = None
+    read_started_monotonic_s: Optional[float] = None
+    fresh_frame: bool = False
+    previous_frame_number: Optional[int] = None
+    discarded_frames: int = 0
 
 
 @dataclass
@@ -54,6 +64,7 @@ class D405RealSenseCamera:
         self._depth_scale: float = 0.001
         self._intrinsics: Any = None
         self._last_depth_m: Optional[np.ndarray] = None
+        self._last_frame_number: Optional[int] = None
 
     @property
     def serial(self) -> Optional[str]:
@@ -64,7 +75,7 @@ class D405RealSenseCamera:
         ctx = rs.context()
         device = self._select_device(ctx)
         if device is None:
-            raise RuntimeError("No Intel RealSense D405 device detected.")
+            raise RuntimeError("No supported Intel RealSense D405/D435 device detected.")
 
         serial = str(device.get_info(rs.camera_info.serial_number))
         config = rs.config()
@@ -89,7 +100,7 @@ class D405RealSenseCamera:
             profile = pipeline.start(config)
         except Exception as exc:
             raise RuntimeError(
-                "Failed to start the D405 stream via pyrealsense2. Verify librealsense installation, "
+                "Failed to start the RealSense color/depth streams via pyrealsense2. Verify librealsense installation, "
                 "udev rules, camera permissions, and that no other process is holding the device."
             ) from exc
         depth_sensor = profile.get_device().first_depth_sensor()
@@ -98,6 +109,7 @@ class D405RealSenseCamera:
         self._align = rs.align(rs.stream.color)
         self._serial = serial
         self._last_depth_m = None
+        self._last_frame_number = None
         self._prime_stream()
         return serial
 
@@ -110,7 +122,7 @@ class D405RealSenseCamera:
                 name = str(device.get_info(rs.camera_info.name))
             except RuntimeError:
                 continue
-            if "D405" not in name and "Depth Camera 405" not in name:
+            if not any(model in name.upper() for model in ("D405", "D435", "DEPTH CAMERA 405", "DEPTH CAMERA 435")):
                 continue
             serial = str(device.get_info(rs.camera_info.serial_number))
             candidates.append((serial, device))
@@ -121,7 +133,7 @@ class D405RealSenseCamera:
             for serial, device in candidates:
                 if serial == requested_serial:
                     return device
-            raise RuntimeError(f"Requested D405 serial {requested_serial} was not found.")
+            raise RuntimeError(f"Requested RealSense D405/D435 serial {requested_serial} was not found.")
         return candidates[0][1]
 
     def _prime_stream(self) -> None:
@@ -131,17 +143,46 @@ class D405RealSenseCamera:
             if bundle is not None:
                 return
 
-    def read_frames(self) -> Optional[D405FrameBundle]:
+    def read_frames(self, *, fresh: bool = False) -> Optional[D405FrameBundle]:
         if self._pipeline is None or self._align is None or self._serial is None:
             return None
 
         rs = _import_rs()
-        frames = self._pipeline.wait_for_frames(timeout_ms=1000)
-        aligned = self._align.process(frames)
-        color_frame = aligned.get_color_frame()
-        depth_frame = aligned.get_depth_frame()
-        if not color_frame or not depth_frame:
-            return None
+        read_started = time.monotonic()
+        previous = self._last_frame_number
+        discarded = 0
+        if fresh:
+            # Clear available frames, then cross a new-frame barrier. The
+            # second wait must advance the device frame counter again. This
+            # proves a new acquisition without comparing camera/PC wall clocks.
+            for _ in range(16):
+                pending = self._pipeline.poll_for_frames()
+                if not pending:
+                    break
+                discarded += 1
+            barrier = self._pipeline.wait_for_frames(timeout_ms=1000)
+            barrier_color = barrier.get_color_frame()
+            if not barrier_color:
+                return None
+            previous = int(barrier_color.get_frame_number())
+        # A synchronized frameset may legitimately reuse its slower stream.
+        # Wait through those sets rather than mistaking one reuse for a stall.
+        for _ in range(6):
+            frames = self._pipeline.wait_for_frames(timeout_ms=1000)
+            received_monotonic_s = time.monotonic()
+            aligned = self._align.process(frames)
+            color_frame = aligned.get_color_frame()
+            depth_frame = aligned.get_depth_frame()
+            if not color_frame or not depth_frame:
+                continue
+            number = int(color_frame.get_frame_number())
+            if previous is None or number > previous:
+                break
+        else:
+            if not color_frame or not depth_frame:
+                return None
+            raise RuntimeError("Camera frame counter did not advance; a fresh image was not acquired.")
+        self._last_frame_number = number
 
         video_profile = color_frame.profile.as_video_stream_profile()
         self._intrinsics = video_profile.get_intrinsics()
@@ -158,6 +199,18 @@ class D405RealSenseCamera:
             width=int(color_rgb.shape[1]),
             height=int(color_rgb.shape[0]),
             serial=self._serial,
+            intrinsics={
+                "width": int(self._intrinsics.width), "height": int(self._intrinsics.height),
+                "fx": float(self._intrinsics.fx), "fy": float(self._intrinsics.fy),
+                "ppx": float(self._intrinsics.ppx), "ppy": float(self._intrinsics.ppy),
+                "model": int(self._intrinsics.model), "coeffs": [float(value) for value in self._intrinsics.coeffs],
+            },
+            frame_number=number,
+            timestamp_ms=float(color_frame.get_timestamp()),
+            timestamp_domain=str(color_frame.get_frame_timestamp_domain()),
+            received_monotonic_s=received_monotonic_s,
+            read_started_monotonic_s=read_started,
+            fresh_frame=bool(fresh), previous_frame_number=previous, discarded_frames=discarded,
         )
 
     def query_point(self, u: int, v: int) -> D405PointQuery:
@@ -168,11 +221,18 @@ class D405RealSenseCamera:
 
     def query_point_from_bundle(self, bundle: D405FrameBundle, u: int, v: int) -> D405PointQuery:
         pixel = (int(u), int(v))
-        if self._intrinsics is None:
+        intrinsics = self._intrinsics
+        if bundle.intrinsics is not None:
+            rs = _import_rs()
+            intrinsics = rs.intrinsics()
+            for key in ("width", "height", "fx", "fy", "ppx", "ppy", "coeffs"):
+                setattr(intrinsics, key, bundle.intrinsics[key])
+            intrinsics.model = rs.distortion(bundle.intrinsics["model"])
+        if intrinsics is None:
             return D405PointQuery(valid=False, pixel=pixel, depth_m=None, point_m=None)
-        return self._query_point_from_depth(bundle.depth_m, pixel)
+        return self._query_point_from_depth(bundle.depth_m, pixel, intrinsics=intrinsics)
 
-    def _query_point_from_depth(self, depth_m_array: np.ndarray, pixel: tuple[int, int]) -> D405PointQuery:
+    def _query_point_from_depth(self, depth_m_array: np.ndarray, pixel: tuple[int, int], *, intrinsics=None) -> D405PointQuery:
         u, v = pixel
 
         height, width = depth_m_array.shape
@@ -185,7 +245,7 @@ class D405RealSenseCamera:
 
         rs = _import_rs()
         point = rs.rs2_deproject_pixel_to_point(
-            self._intrinsics,
+            intrinsics if intrinsics is not None else self._intrinsics,
             [float(u), float(v)],
             depth,
         )
@@ -203,6 +263,7 @@ class D405RealSenseCamera:
         self._serial = None
         self._intrinsics = None
         self._last_depth_m = None
+        self._last_frame_number = None
         if pipeline is not None:
             pipeline.stop()
 

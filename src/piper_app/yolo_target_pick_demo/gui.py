@@ -5,17 +5,16 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Optional
 
-import numpy as np
-from PIL import Image, ImageDraw
 
 from piper_app.camera.d405 import D405FrameBundle
-from piper_app.perception.yolo import YoloDetection, YoloPrediction
+from piper_app.perception.yolo import YoloDetection, YoloPrediction, render_detections
 from piper_app.pick_demo.gui import ClickPickDemoGuiApp
 from piper_app.pick_demo.task import build_pick_plan, compute_base_point_from_camera, validate_workspace_point
 
 
 class YoloTargetPickDemoGuiApp(ClickPickDemoGuiApp):
     def __init__(self, root: tk.Tk, args: argparse.Namespace):
+        self._configured_target_label: Optional[str] = None
         self._available_yolo_labels: list[str] = []
         self._target_object_text = str(getattr(args, "target_label", "")).strip()
         super().__init__(root, args)
@@ -24,6 +23,7 @@ class YoloTargetPickDemoGuiApp(ClickPickDemoGuiApp):
     def _build_base_vars(self) -> None:
         super()._build_base_vars()
         self.target_object_var = tk.StringVar(value=self._target_object_text)
+        self.show_masks_var = tk.BooleanVar(value=True)
 
     def build_left_panel(self, parent: ttk.Frame) -> None:
         for row in range(7):
@@ -63,8 +63,8 @@ class YoloTargetPickDemoGuiApp(ClickPickDemoGuiApp):
         ttk.Label(
             frame,
             text=(
-                "Recommended flow: move to Observe, choose a YOLO class from the dropdown or type a recognized "
-                "class name, pause the frame, let the demo auto-select the matching bbox center, then run Execute Pick. "
+                "Move to Observe, type a target category and press Enter, pause the frame, then run Execute Pick. "
+                "Promptable YOLOE weights accept descriptions such as wooden block. Boxes and masks are automatic. "
                 "If the paused frame does not contain the chosen object, Execute Pick will refuse to run."
             ),
             wraplength=1500,
@@ -112,13 +112,21 @@ class YoloTargetPickDemoGuiApp(ClickPickDemoGuiApp):
 
         ttk.Label(
             frame,
-            text="Flow: choose a class -> pause frame -> auto-select the matching bbox center -> Execute Pick",
+            text="Flow: type category + Enter -> pause frame -> Execute Pick",
             wraplength=520,
             justify="left",
         ).grid(row=3, column=0, columnspan=3, sticky="w", pady=(8, 0))
         ttk.Checkbutton(frame, text="Dry-run", variable=self.dry_run_var).grid(row=3, column=3, sticky="e", pady=(8, 0))
+        ttk.Checkbutton(frame, text="Show masks", variable=self.show_masks_var).grid(
+            row=4, column=0, sticky="w", pady=(8, 0)
+        )
+        ttk.Label(frame, text="Pickup uses the saved approach and gripper settings.", wraplength=390).grid(
+            row=4, column=1, columnspan=3, sticky="w", pady=(8, 0)
+        )
 
     def reload_workspace(self) -> None:
+        if self._action_running:
+            return
         super().reload_workspace()
         self.selected_warning_text = "Workspace loaded. Choose a target object, pause the frame, then execute the pick."
         self._last_event_text = "YOLO target-pick workspace reloaded."
@@ -132,7 +140,7 @@ class YoloTargetPickDemoGuiApp(ClickPickDemoGuiApp):
         return str(label).strip().casefold()
 
     def _current_prediction(self) -> Optional[YoloPrediction]:
-        if self._paused and self._frozen_prediction is not None:
+        if self._paused:
             return self._frozen_prediction
         return self._live_prediction
 
@@ -145,7 +153,7 @@ class YoloTargetPickDemoGuiApp(ClickPickDemoGuiApp):
         return str(self.target_object_var.get()).strip()
 
     def _sync_yolo_label_options(self) -> None:
-        labels = self._yolo_detector.class_names
+        labels = self._yolo_detector.suggested_class_names
         if not labels or labels == self._available_yolo_labels:
             return
         self._available_yolo_labels = list(labels)
@@ -183,18 +191,7 @@ class YoloTargetPickDemoGuiApp(ClickPickDemoGuiApp):
         if not detections and self._current_target_label():
             return bundle.color_rgb
 
-        image = Image.fromarray(bundle.color_rgb)
-        draw = ImageDraw.Draw(image)
-        for detection in detections:
-            x1, y1, x2, y2 = detection.bbox_xyxy
-            draw.rectangle((x1, y1, x2, y2), outline="#22c55e", width=3)
-            label_text = f"{detection.label} {detection.confidence:.2f}"
-            text_x = max(0, x1)
-            text_y = max(0, y1 - 18)
-            text_bbox = draw.textbbox((text_x, text_y), label_text)
-            draw.rectangle(text_bbox, fill="#22c55e")
-            draw.text((text_x, text_y), label_text, fill="black")
-        return np.asarray(image)
+        return render_detections(bundle.color_rgb, detections, show_masks=bool(self.show_masks_var.get()))
 
     def _select_target_from_source_pixel(
         self,
@@ -263,22 +260,48 @@ class YoloTargetPickDemoGuiApp(ClickPickDemoGuiApp):
         center_pixel = ((x1 + x2) // 2, (y1 + y2) // 2)
         return self._select_target_from_source_pixel(center_pixel, bundle=bundle, detection=detection)
 
-    def _on_target_object_input(self, _event=None) -> None:
+    def _apply_target_category(self) -> None:
         target_label = self._current_target_label()
+        if target_label == self._configured_target_label:
+            return
+        # Predictions belong to a particular prompt. Never retain an old target
+        # or plan when a new prompt fails or has not been inferred yet.
+        self.selected_plan = None
+        self._selected_pixel = None
+        self._selected_detection = None
+        self._selected_detection_text = "No detection selected."
+        self._live_prediction = None
+        self._frozen_prediction = None
+        self._yolo_detector.set_target_label(target_label)
+        self._configured_target_label = target_label
         self._target_object_text = target_label
-        if target_label and self._available_yolo_labels:
-            valid_labels = {self._normalize_label(label) for label in self._available_yolo_labels}
-            if self._normalize_label(target_label) not in valid_labels:
-                self.selected_warning_text = f"'{target_label}' is not in the current model label list."
-                self.selected_plan = None
-                self.refresh_ui()
-                return
-        if self._paused and target_label:
-            if self._auto_select_target_in_current_view():
-                self._last_event_text = f"Auto-selected paused target '{target_label}'."
-            else:
-                self._last_event_text = f"No paused detection found for '{target_label}'."
-            self.refresh_ui()
+        self._yolo_enabled = True
+        self._sync_yolo_label_options()
+
+    def _on_target_object_input(self, _event=None) -> None:
+        if self._action_running:
+            self.target_object_var.set(self._configured_target_label or "")
+            return
+        try:
+            changed = self._current_target_label() != self._configured_target_label
+            self._apply_target_category()
+            target_label = self._current_target_label()
+            if self._paused and self._frozen_bundle is not None and (changed or self._frozen_prediction is None):
+                self._frozen_prediction = self._yolo_detector.predict(self._frozen_bundle.color_rgb)
+                self._auto_select_target_in_current_view()
+            mode = "Text prompt" if self._yolo_detector.supports_text_prompts else "Class filter"
+            self._last_event_text = f"{mode}: '{target_label or 'all default categories'}'."
+        except Exception as exc:
+            self.selected_plan = None
+            self._live_prediction = None
+            self._frozen_prediction = None
+            self.selected_warning_text = str(exc)
+            self._last_event_text = f"Target category failed: {type(exc).__name__}: {exc}"
+        self.refresh_ui()
+
+    def clear_selection(self) -> None:
+        if not self._action_running:
+            super().clear_selection()
 
     def _on_canvas_click(self, _event) -> None:
         self._last_event_text = "Manual point clicks are disabled in this demo."
@@ -286,6 +309,19 @@ class YoloTargetPickDemoGuiApp(ClickPickDemoGuiApp):
         self.refresh_ui()
 
     def toggle_pause(self) -> None:
+        if self._action_running:
+            return
+        if not self._paused:
+            try:
+                changed = self._current_target_label() != self._configured_target_label
+                self._apply_target_category()
+                if (changed or self._live_prediction is None) and self._camera_bundle is not None:
+                    self._live_prediction = self._yolo_detector.predict(self._camera_bundle.color_rgb)
+            except Exception as exc:
+                self.selected_warning_text = str(exc)
+                self._last_event_text = f"Cannot freeze target: {exc}"
+                self.refresh_ui()
+                return
         self._paused = not self._paused
         if self._paused:
             self._frozen_bundle = self._camera_bundle
@@ -305,6 +341,13 @@ class YoloTargetPickDemoGuiApp(ClickPickDemoGuiApp):
         self.refresh_ui()
 
     def on_camera_bundle(self, bundle: D405FrameBundle) -> None:
+        if self._yolo_enabled and self._configured_target_label is None:
+            try:
+                self._apply_target_category()
+            except Exception as exc:
+                self._yolo_enabled = False
+                self._last_event_text = f"Target category failed: {exc}"
+                self.selected_warning_text = str(exc)
         super().on_camera_bundle(bundle)
         if self._yolo_enabled:
             self._sync_yolo_label_options()
@@ -325,6 +368,8 @@ class YoloTargetPickDemoGuiApp(ClickPickDemoGuiApp):
             raise RuntimeError("Choose a target object from the dropdown, or type a recognized class name, before executing.")
         if not self._paused:
             raise RuntimeError("Pause the frame first so the target object is locked before executing the pick.")
+        if target_label != self._configured_target_label:
+            raise RuntimeError("Press Enter to apply the target category before executing the pick.")
         if not self._auto_select_target_in_current_view():
             raise RuntimeError(self.selected_warning_text or f"No paused '{target_label}' object is available to pick.")
         super().execute_pick_sequence()
